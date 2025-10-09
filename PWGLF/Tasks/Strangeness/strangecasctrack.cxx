@@ -13,14 +13,16 @@
 /// \brief Analysis of strangeness tracking efficiency via primary production of Omega and Xi in Run 3
 /// \author Yakiv Paroviak (yakiv.paroviak@cern.ch)
 
-#include "Framework/runDataProcessing.h"
-#include "Framework/AnalysisTask.h"
+#include "PWGLF/DataModel/LFStrangenessTables.h"
+
 #include "Common/DataModel/Centrality.h"
-#include "Common/DataModel/Multiplicity.h"
 #include "Common/DataModel/EventSelection.h"
+#include "Common/DataModel/Multiplicity.h"
+
 #include "Framework/ASoAHelpers.h"
 #include "Framework/AnalysisDataModel.h"
-#include "PWGLF/DataModel/LFStrangenessTables.h"
+#include "Framework/AnalysisTask.h"
+#include "Framework/runDataProcessing.h"
 
 using namespace o2;
 using namespace o2::framework;
@@ -51,7 +53,6 @@ struct StrangeCascTrack {
   Configurable<double> CutDCAtoPVxy{"cutpvdcaxy", 0.02f, "max cascade dca to PV in xy"};
   Configurable<double> CutDCAtoPVz{"cutpvdcaz", 0.02f, "max cascade dca to PV in z"};
 
-
   void init(InitContext const&)
   {
     histos.add("Events/EvCounter", "Event Counter", kTH1F, {{1, 0, 1}});
@@ -60,106 +61,105 @@ struct StrangeCascTrack {
     histos.add("Events/PVz", "PV z position", kTH1F, {{100, -20, 20}});
     histos.add("Events/Mult", "Multiplicity", kTH1F, {axisMult});
 
-    histos.add("Tracked/Phi", "Phi", kTH1F, {{100, 0., 2*M_PI}});
+    histos.add("Tracked/Phi", "Phi", kTH1F, {{100, 0., 2 * M_PI}});
     histos.add("Tracked/Eta", "Eta", kTH1F, {{102, -2.01, 2.01}});
     histos.add("Tracked/DCAxy", "DCA to xy", kTH1F, {{500, 0., 0.5}});
     histos.add("Tracked/DCAz", "DCA to z", kTH1F, {{500, 0., 0.5}});
     histos.add("Tracked/EvMult", "Multiplicity of events with >=1 cascade", kTH1F, {axisMult});
-    histos.add("Tracked/MassOmega", "Invariant mass hypothesis",kTH1F, {axisOmegaMass});
+    histos.add("Tracked/MassOmega", "Invariant mass hypothesis", kTH1F, {axisOmegaMass});
     histos.add("Tracked/MassXi", "Invariant mass hypothesis", kTH1F, {axisXiMass});
-    histos.add("Tracked/Omega", "",kTHnD, {axisOmegaMass, axisPt, axisMult});
+    histos.add("Tracked/Omega", "", kTHnD, {axisOmegaMass, axisPt, axisMult});
     histos.add("Tracked/Xi", "", kTHnD, {axisXiMass, axisPt, axisMult});
 
-    histos.add("All/Phi", "Phi", kTH1F, {{100, 0., 2*M_PI}});
+    histos.add("All/Phi", "Phi", kTH1F, {{100, 0., 2 * M_PI}});
     histos.add("All/Eta", "Eta", kTH1F, {{102, -2.01, 2.01}});
     histos.add("All/DCAxy", "DCA to xy", kTH1F, {{1000, 0, 1.}});
     histos.add("All/DCAz", "DCA to z", kTH1F, {{1000, 0, 1.}});
     histos.add("All/EvMult", "Multiplicity of events with >=1 cascade", kTH1F, {axisMult});
-    histos.add("All/MassOmega", "Invariant mass hypothesis",kTH1F, {axisOmegaMass});
+    histos.add("All/MassOmega", "Invariant mass hypothesis", kTH1F, {axisOmegaMass});
     histos.add("All/MassXi", "Invariant mass hypothesis", kTH1F, {axisXiMass});
     histos.add("All/Omega", "", kTHnD, {axisOmegaMass, axisPt, axisMult});
-    histos.add("All/Xi", "", kTHnD, {axisXiMass, axisPt, axisMult}); 
+    histos.add("All/Xi", "", kTHnD, {axisXiMass, axisPt, axisMult});
   }
 
+  void processTracked(soa::Join<aod::Collisions, aod::EvSels, aod::CentFT0Ms, aod::CentFT0Cs, aod::PVMults>::iterator const& collision,
+                      aod::TraCascDatas const& tracascades)
+  {
+    double mult = doProcessPP ? collision.centFT0M() : collision.centFT0C();
+    int64_t casccollid = 0;
+    for (auto const& cascade : tracascades) {
 
-void processTracked(soa::Join<aod::Collisions, aod::EvSels, aod::CentFT0Ms, aod::CentFT0Cs, aod::PVMults>::iterator const& collision,
-             aod::TraCascDatas const& tracascades)
-{
-  double mult = doProcessPP ? collision.centFT0M() : collision.centFT0C(); 
-  int64_t casccollid = 0; 
-  for (auto const& cascade : tracascades) {
+      double dcaxy = cascade.dcaXYCascToPV();
+      double dcaz = cascade.dcaZCascToPV();
+      if (doApplyCuts && ((dcaxy > CutDCAtoPVxy) || (dcaz > CutDCAtoPVz)))
+        continue; // DCA check
 
-    double dcaxy = cascade.dcaXYCascToPV();
-    double dcaz = cascade.dcaZCascToPV(); 
-    if (doApplyCuts && ((dcaxy > CutDCAtoPVxy) || (dcaz > CutDCAtoPVz))) continue; // DCA check
+      if (collision.index() != casccollid) {
+        histos.fill(HIST("Tracked/EvMult"), mult); // count and list mult of events with at least one cascade
+        casccollid = collision.index();
+      }
 
-    if (collision.index() != casccollid) {
-      histos.fill(HIST("Tracked/EvMult"), mult); // count and list mult of events with at least one cascade
-      casccollid = collision.index();
+      double pt = cascade.pt();
+      double phi = cascade.phi();
+      double eta = cascade.eta();
+      double massXi = cascade.mXi();
+      double massOmega = cascade.mOmega();
+
+      histos.fill(HIST("Tracked/DCAxy"), dcaxy);
+      histos.fill(HIST("Tracked/DCAz"), dcaz);
+      histos.fill(HIST("Tracked/Phi"), phi);
+      histos.fill(HIST("Tracked/Eta"), eta);
+      histos.fill(HIST("Tracked/MassXi"), massXi);
+      histos.fill(HIST("Tracked/MassOmega"), massOmega);
+      histos.fill(HIST("Tracked/Xi"), massXi, pt, mult);
+      histos.fill(HIST("Tracked/Omega"), massOmega, pt, mult);
     }
-
-    double pt = cascade.pt();            
-    double phi = cascade.phi();
-    double eta = cascade.eta();
-    double massXi = cascade.mXi();      
-    double massOmega = cascade.mOmega(); 
-
-    histos.fill(HIST("Tracked/DCAxy"), dcaxy);
-    histos.fill(HIST("Tracked/DCAz"), dcaz);
-    histos.fill(HIST("Tracked/Phi"), phi);
-    histos.fill(HIST("Tracked/Eta"), eta);
-    histos.fill(HIST("Tracked/MassXi"), massXi);
-    histos.fill(HIST("Tracked/MassOmega"), massOmega);
-    histos.fill(HIST("Tracked/Xi"), massXi, pt, mult);
-    histos.fill(HIST("Tracked/Omega"), massOmega, pt, mult);
-
   }
-}
 
-void processAll(soa::Join<aod::Collisions, aod::EvSels, aod::CentFT0Ms, aod::CentFT0Cs, aod::PVMults>::iterator const& collision,
-             aod::CascDatas const& cascades)
-{
-  histos.fill(HIST("Events/EvCounter"), 0.5);
-  double mult = doProcessPP ? collision.centFT0M() : collision.centFT0C(); 
-  histos.fill(HIST("Events/Mult"), mult);
-  double pvx = collision.posX();
-  double pvy = collision.posY();
-  double pvz = collision.posZ();
-  histos.fill(HIST("Events/PVx"), pvx);
-  histos.fill(HIST("Events/PVy"), pvy);
-  histos.fill(HIST("Events/PVz"), pvz);
+  void processAll(soa::Join<aod::Collisions, aod::EvSels, aod::CentFT0Ms, aod::CentFT0Cs, aod::PVMults>::iterator const& collision,
+                  aod::CascDatas const& cascades)
+  {
+    histos.fill(HIST("Events/EvCounter"), 0.5);
+    double mult = doProcessPP ? collision.centFT0M() : collision.centFT0C();
+    histos.fill(HIST("Events/Mult"), mult);
+    double pvx = collision.posX();
+    double pvy = collision.posY();
+    double pvz = collision.posZ();
+    histos.fill(HIST("Events/PVx"), pvx);
+    histos.fill(HIST("Events/PVy"), pvy);
+    histos.fill(HIST("Events/PVz"), pvz);
 
-  int64_t casccollid = 0; 
-  for (auto const& cascade : cascades) {
+    int64_t casccollid = 0;
+    for (auto const& cascade : cascades) {
 
-    double dcaxy = cascade.dcaXYCascToPV();
-    double dcaz = cascade.dcaZCascToPV();
-    if (doApplyCuts && ((dcaxy > CutDCAtoPVxy) || (dcaz > CutDCAtoPVz))) continue; // DCA check
+      double dcaxy = cascade.dcaXYCascToPV();
+      double dcaz = cascade.dcaZCascToPV();
+      if (doApplyCuts && ((dcaxy > CutDCAtoPVxy) || (dcaz > CutDCAtoPVz)))
+        continue; // DCA check
 
-    if (collision.index() != casccollid) {
-      histos.fill(HIST("All/EvMult"), mult); // count and list mult of events with at least one cascade
-      casccollid = collision.index();
+      if (collision.index() != casccollid) {
+        histos.fill(HIST("All/EvMult"), mult); // count and list mult of events with at least one cascade
+        casccollid = collision.index();
+      }
+
+      double pt = cascade.pt();
+      double phi = cascade.phi();
+      double eta = cascade.eta();
+      double massXi = cascade.mXi();
+      double massOmega = cascade.mOmega();
+
+      histos.fill(HIST("All/DCAxy"), dcaxy);
+      histos.fill(HIST("All/DCAz"), dcaz);
+      histos.fill(HIST("All/Phi"), phi);
+      histos.fill(HIST("All/Eta"), eta);
+      histos.fill(HIST("All/MassXi"), massXi);
+      histos.fill(HIST("All/MassOmega"), massOmega);
+      histos.fill(HIST("All/Xi"), massXi, pt, mult);
+      histos.fill(HIST("All/Omega"), massOmega, pt, mult);
     }
-
-    double pt = cascade.pt();            
-    double phi = cascade.phi();
-    double eta = cascade.eta();
-    double massXi = cascade.mXi();       
-    double massOmega = cascade.mOmega(); 
-
-    histos.fill(HIST("All/DCAxy"), dcaxy);
-    histos.fill(HIST("All/DCAz"), dcaz);
-    histos.fill(HIST("All/Phi"), phi);
-    histos.fill(HIST("All/Eta"), eta);
-    histos.fill(HIST("All/MassXi"), massXi);
-    histos.fill(HIST("All/MassOmega"), massOmega);
-    histos.fill(HIST("All/Xi"), massXi, pt, mult);
-    histos.fill(HIST("All/Omega"), massOmega, pt, mult);
-
   }
-}
-PROCESS_SWITCH(StrangeCascTrack, processTracked, "process tracked cascades", true);
-PROCESS_SWITCH(StrangeCascTrack, processAll, "process all cascades", true);
+  PROCESS_SWITCH(StrangeCascTrack, processTracked, "process tracked cascades", true);
+  PROCESS_SWITCH(StrangeCascTrack, processAll, "process all cascades", true);
 };
 
 WorkflowSpec defineDataProcessing(ConfigContext const& cfgc)
