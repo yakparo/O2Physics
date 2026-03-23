@@ -1056,15 +1056,15 @@ struct StrangeCascTrack {
           continue; // from this point on - only gen events (and cascades from such events) that were reconstructed
         int64_t genCollId = recColl.straMCCollisionId();
         if (genColl.index() != genCollId)
-          continue; // safety check for correct slicing
+          continue;         // safety check for correct slicing
         if (!recoCounter) { // fill counting histograms only once for each gen reco>=1 event
           histos.fill(HIST("MC/EvRec/EvCounter"), 0.5);
           histos.fill(HIST("MC/EvRec/Mult"), genMult);
           recoCounter = true;
         }
         if (biggestNContribs < recColl.multPVTotalContributors()) {
-        biggestNContribs = recColl.multPVTotalContributors();
-        bestCentrality = (doProcessIons) ? recColl.centFT0C() : recColl.centFT0M();
+          biggestNContribs = recColl.multPVTotalContributors();
+          bestCentrality = (doProcessIons) ? recColl.centFT0C() : recColl.centFT0M();
         }
         // look at generated cascades within reconstructed events
         for (auto const& casc : slicedGenCascs) {
@@ -1101,8 +1101,8 @@ struct StrangeCascTrack {
       }
       // fill centrality exactly once for each rec gen event
       if (biggestNContribs >= 0) {
-      histos.fill(HIST("MC/EvRec/MultCent"), bestCentrality, genMult);
-      histos.fill(HIST("MC/EvRec/Cent"), bestCentrality);
+        histos.fill(HIST("MC/EvRec/MultCent"), bestCentrality, genMult);
+        histos.fill(HIST("MC/EvRec/Cent"), bestCentrality);
       }
     }
   }
